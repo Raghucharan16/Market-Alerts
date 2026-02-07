@@ -185,32 +185,60 @@ def get_yahoo_stock_price(symbol: str) -> Optional[float]:
 
 # ... (get_google_finance_price remains same)
 
-def get_stock_price(symbol: str) -> Optional[float]:
+def get_google_finance_price(symbol: str) -> Optional[float]:
     """
-    Get stock price with multiple fallback mechanisms AND Name Resolution
+    Fallback 3: Fetch stock price from Google Finance
     """
-    # 1. Primary: NSE (Only if it looks like a clean symbol)
-    # If symbol has spaces, skip NSE direct fetch as it will fail
+    try:
+        # NSE stocks on Google Finance format: "SYMBOL:NSE"
+        clean_symbol = symbol.replace(' ', '')
+        url = f"https://www.google.com/finance/quote/{clean_symbol}:NSE"
+        
+        session = get_request_session()
+        response = session.get(url, timeout=10)
+        
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            # The price class on Google Finance is usually "YMlKec fxKbKc"
+            price_div = soup.find('div', class_='YMlKec fxKbKc')
+            
+            if price_div:
+                price_text = price_div.text.replace('₹', '').replace(',', '').strip()
+                price = float(price_text)
+                log.info(f"Google Finance: {clean_symbol} = ₹{price}")
+                return price
+                
+    except Exception as e:
+        log.error(f"Error fetching Google Finance price for {symbol}: {e}")
+    
+    return None
+
+def get_stock_price(symbol: str) -> tuple[Optional[float], Optional[str]]:
+    """
+    Get stock price with multiple fallback mechanisms AND Name Resolution.
+    Returns: (price, resolved_symbol)
+    """
+    # 1. Primary: NSE
     if ' ' not in symbol:
         price = get_nse_stock_price(symbol)
         if price is not None:
-            return price
+            return price, None
     else:
         log.warning(f"Symbol '{symbol}' has spaces, skipping direct NSE fetch.")
 
-    # 2. Yahoo Finance (Try direct first)
+    # 2. Yahoo Finance
     log.warning(f"Trying Yahoo Finance for '{symbol}'...")
     price = get_yahoo_stock_price(symbol)
     if price is not None:
-        return price
+        return price, None
 
     # 3. Google Finance
     log.warning(f"Trying Google Finance for '{symbol}'...")
     price = get_google_finance_price(symbol)
     if price is not None:
-        return price
+        return price, None
         
-    # 4. RESOLVER FALLBACK (The requested "Helper File" logic)
+    # 4. RESOLVER FALLBACK
     log.warning(f"Direct fetches failed for '{symbol}'. Attempting to resolve name to symbol...")
     resolved_symbol = search_symbol(symbol)
     
@@ -218,18 +246,20 @@ def get_stock_price(symbol: str) -> Optional[float]:
         log.info(f"✨ Resolved '{symbol}' to '{resolved_symbol}'. Retrying fetch...")
         
         # Try Yahoo with the RESOLVED symbol
+        # Note: resolved_symbol usually has .NS suffix.
         price = get_yahoo_stock_price(resolved_symbol)
         if price is not None:
-            return price
+            return price, resolved_symbol
             
         # Try NSE if resolving gave a .NS symbol
         if resolved_symbol.endswith('.NS'):
             clean_nse = resolved_symbol.replace('.NS', '')
             price = get_nse_stock_price(clean_nse)
             if price is not None:
-                return price
+                # If NSE worked with the clean symbol, we prefer that as the new symbol
+                return price, clean_nse
                 
-    return None
+    return None, None
 
 
 def should_send_alert(stock_id: int, alert_type: str) -> bool:
@@ -409,11 +439,23 @@ def process_stock(stock: Dict):
         # Checking price updates 'last_price' which is good. So let's continue but just flag it.
     
     # Get current price
-    current_price = get_stock_price(symbol)
+    current_price, resolved_symbol = get_stock_price(symbol)
     
     if current_price is None:
         log.warning(f"Could not fetch price for {symbol}, skipping...")
         return
+
+    # AUTO-FIX: Update symbol in database if resolved
+    if resolved_symbol and resolved_symbol != symbol:
+        try:
+            log.info(f"🛠️ Auto-Fixing symbol in DB: '{symbol}' -> '{resolved_symbol}'")
+            # If resolved symbol has .NS but user had Name, we save the Ticker.
+            supabase.table('stocks').update({
+                'symbol': resolved_symbol
+            }).eq('id', stock_id).execute()
+            log.info("✅ Database updated with correct symbol!")
+        except Exception as e:
+            log.error(f"Failed to update symbol in DB: {e}")
     
     # Calculate thresholds
     profit_target = atp * (1 + profit_pct / 100)
