@@ -258,9 +258,9 @@ def record_alert(stock_id: int, user_id: int, alert_type: str,
         }).execute()
         
         # Update last_alert_sent timestamp on stock
+        # Update last_alert_sent timestamp on stock
         supabase.table('stocks').update({
-            'last_alert_sent': datetime.now().isoformat(),
-            'last_price': current_price
+            'last_alert_sent': datetime.now().isoformat()
         }).eq('id', stock_id).execute()
         
         log.info(f"Alert recorded for stock_id={stock_id}, type={alert_type}")
@@ -381,9 +381,9 @@ def process_stock(stock: Dict):
     """Process a single stock and check for alerts"""
     stock_id = stock['id']
     symbol = stock['symbol']
-    atp = float(stock['atp_price'])
-    profit_pct = float(stock['profit_threshold'])
-    loss_pct = float(stock['loss_threshold'])
+    atp = float(stock['buy_price'])
+    profit_pct = float(stock['profit_alert_pct'])
+    loss_pct = float(stock['loss_alert_pct'])
     user_id = stock.get('user_id') 
     
     # Extract webhook from joined profiles data
@@ -480,12 +480,13 @@ def process_stock(stock: Dict):
         log.info(f"{symbol} is within normal range")
     
     # Update last_price in database
-    try:
-        supabase.table('stocks').update({
-            'last_price': current_price
-        }).eq('id', stock_id).execute()
-    except Exception as e:
-        log.error(f"Error updating last_price for {symbol}: {e}")
+    # Update last_price in database - REMOVED as column does not exist in schema
+    # try:
+    #     supabase.table('stocks').update({
+    #         'last_price': current_price
+    #     }).eq('id', stock_id).execute()
+    # except Exception as e:
+    #     log.error(f"Error updating last_price for {symbol}: {e}")
 
 
 def main():

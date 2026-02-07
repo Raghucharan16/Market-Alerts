@@ -7,9 +7,9 @@ import { useState } from 'react'
 interface Stock {
     id: number
     symbol: string
-    atp_price: number
-    profit_threshold: number
-    loss_threshold: number
+    buy_price: number
+    profit_alert_pct: number
+    loss_alert_pct: number
     is_active: boolean
 }
 
@@ -62,8 +62,8 @@ export default function StockList({ stocks, onUpdate }: { stocks: Stock[], onUpd
     return (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {stocks.map((stock) => {
-                const profitTarget = (stock.atp_price * (1 + stock.profit_threshold / 100)).toFixed(2)
-                const lossTarget = (stock.atp_price * (1 - stock.loss_threshold / 100)).toFixed(2)
+                const profitTarget = (stock.buy_price * (1 + stock.profit_alert_pct / 100)).toFixed(2)
+                const lossTarget = (stock.buy_price * (1 - stock.loss_alert_pct / 100)).toFixed(2)
                 const isLoading = loadingId === stock.id
 
                 return (
@@ -77,7 +77,7 @@ export default function StockList({ stocks, onUpdate }: { stocks: Stock[], onUpd
                         <div className="flex justify-between items-start mb-3">
                             <div>
                                 <h3 className="text-lg font-bold text-white">{stock.symbol}</h3>
-                                <p className="text-xs text-gray-400">ATP: ₹{stock.atp_price}</p>
+                                <p className="text-xs text-gray-400">Buy Price: ₹{stock.buy_price}</p>
                             </div>
                             <div className="flex gap-2">
                                 <button
@@ -106,7 +106,7 @@ export default function StockList({ stocks, onUpdate }: { stocks: Stock[], onUpd
                                     <span>Target</span>
                                 </div>
                                 <div className="font-mono text-white">₹{profitTarget}</div>
-                                <div className="text-xs text-gray-500">+{stock.profit_threshold}%</div>
+                                <div className="text-xs text-gray-500">+{stock.profit_alert_pct}%</div>
                             </div>
                             <div className="bg-gray-900/50 p-2 rounded border border-gray-700/50">
                                 <div className="flex items-center gap-1 text-red-400 mb-1">
@@ -114,7 +114,7 @@ export default function StockList({ stocks, onUpdate }: { stocks: Stock[], onUpd
                                     <span>Stop</span>
                                 </div>
                                 <div className="font-mono text-white">₹{lossTarget}</div>
-                                <div className="text-xs text-gray-500">-{stock.loss_threshold}%</div>
+                                <div className="text-xs text-gray-500">-{stock.loss_alert_pct}%</div>
                             </div>
                         </div>
 

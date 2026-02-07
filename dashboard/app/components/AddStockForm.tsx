@@ -24,11 +24,11 @@ export default function AddStockForm({ onSuccess }: { onSuccess: () => void }) {
             if (!user) throw new Error("Not authenticated")
 
             const { error } = await supabase.from('stocks').insert({
-                user_id: user.id, // Explicitly set user_id (matches auth.uid() in policy)
+                user_id: user.id,
                 symbol: formData.symbol.toUpperCase(),
-                atp_price: parseFloat(formData.atp),
-                profit_threshold: parseFloat(formData.profit),
-                loss_threshold: parseFloat(formData.loss),
+                buy_price: parseFloat(formData.atp), // Form field matches 'atp' concept, but DB column is 'buy_price'
+                profit_alert_pct: parseFloat(formData.profit),
+                loss_alert_pct: parseFloat(formData.loss),
                 is_active: true
             })
 
