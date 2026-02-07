@@ -137,89 +137,99 @@ def get_request_session():
     })
     return session
 
+# ... (imports are at top of file, ensuring BeautifulSoup is imported)
+
+# ... (imports)
+from symbol_resolver import search_symbol
+
+# ... (rest of imports)
+
+def format_symbol_for_yahoo(symbol: str) -> str:
+    """Format symbol for Yahoo Finance (e.g., 'Make sure .NS is there')"""
+    if symbol.upper().endswith('.NS') or symbol.upper().endswith('.BO'):
+        return symbol.upper()
+    return f"{symbol}.NS"
+
 def get_yahoo_stock_price(symbol: str) -> Optional[float]:
     """
     Fallback 2: Fetch stock price from Yahoo Finance
-    Note: Has ~15 min delay for Indian stocks (.NS suffix), but very reliable
     """
     try:
-        # NSE stocks need .NS suffix
-        ticker_symbol = f"{symbol}.NS"
+        # Try different formats
+        # 1. As provided formatted for Yahoo
+        # 2. Spaces removed formatted for Yahoo (if not resolved)
         
-        # Use custom session to avoid "Expecting value" errors (blocking)
-        session = get_request_session()
-        stock = yf.Ticker(ticker_symbol, session=session)
+        candidates = [format_symbol_for_yahoo(symbol)]
+        if ' ' in symbol:
+             candidates.append(format_symbol_for_yahoo(symbol.replace(' ', '')))
         
-        # Fast fetch using 'history' (period="1d")
-        data = stock.history(period="1d")
-        
-        if not data.empty:
-            price = data['Close'].iloc[-1]  # Get latest close price
-            log.info(f"Yahoo Finance: {symbol} = ₹{price} (Delayed)")
-            return float(price)
+        for ticker_symbol in candidates:
+            try:
+                # Do NOT pass session to yfinance (it handles it internally now)
+                stock = yf.Ticker(ticker_symbol)
+                
+                # Fast fetch using 'history' (period="1d")
+                data = stock.history(period="1d")
+                
+                if not data.empty:
+                    price = data['Close'].iloc[-1]
+                    log.info(f"Yahoo Finance: {ticker_symbol} = ₹{price} (Delayed)")
+                    return float(price)
+            except Exception:
+                continue
             
     except Exception as e:
         log.error(f"Error fetching Yahoo price for {symbol}: {e}")
     
     return None
 
-def get_google_finance_price(symbol: str) -> Optional[float]:
-    """
-    Fallback 3: Fetch stock price from Google Finance
-    """
-    try:
-        # NSE stocks on Google Finance format: "SYMBOL:NSE"
-        url = f"https://www.google.com/finance/quote/{symbol}:NSE"
-        
-        session = get_request_session()
-        response = session.get(url, timeout=10)
-        
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            # The price class on Google Finance is usually "YMlKec fxKbKc"
-            price_div = soup.find('div', class_='YMlKec fxKbKc')
-            
-            if price_div:
-                price_text = price_div.text.replace('₹', '').replace(',', '').strip()
-                price = float(price_text)
-                log.info(f"Google Finance: {symbol} = ₹{price}")
-                return price
-                
-    except Exception as e:
-        log.error(f"Error fetching Google Finance price for {symbol}: {e}")
-    
-    return None
+# ... (get_google_finance_price remains same)
 
 def get_stock_price(symbol: str) -> Optional[float]:
     """
-    Get stock price with multiple fallback mechanisms:
-    1. Try NSE first (Real-time, fastest)
-    2. If NSE fails, try BSE (Real-time)
-    3. If both fail, try Google Finance (Real-time scraping)
-    4. Last Resort: Yahoo Finance (Reliable, ~15m delay)
+    Get stock price with multiple fallback mechanisms AND Name Resolution
     """
-    # 1. Primary: NSE
-    price = get_nse_stock_price(symbol)
-    if price is not None:
-        return price
-        
-    # 2. Fallback: BSE
-    log.warning(f"NSE failed for {symbol}, trying BSE...")
-    price = get_bse_stock_price(symbol)
+    # 1. Primary: NSE (Only if it looks like a clean symbol)
+    # If symbol has spaces, skip NSE direct fetch as it will fail
+    if ' ' not in symbol:
+        price = get_nse_stock_price(symbol)
+        if price is not None:
+            return price
+    else:
+        log.warning(f"Symbol '{symbol}' has spaces, skipping direct NSE fetch.")
+
+    # 2. Yahoo Finance (Try direct first)
+    log.warning(f"Trying Yahoo Finance for '{symbol}'...")
+    price = get_yahoo_stock_price(symbol)
     if price is not None:
         return price
 
-    # 3. Fallback: Google Finance
-    log.warning(f"BSE failed for {symbol}, trying Google Finance...")
+    # 3. Google Finance
+    log.warning(f"Trying Google Finance for '{symbol}'...")
     price = get_google_finance_price(symbol)
     if price is not None:
         return price
         
-    # 4. Last Resort: Yahoo Finance
-    log.warning(f"Google Finance failed for {symbol}, trying Yahoo Finance...")
-    price = get_yahoo_stock_price(symbol)
+    # 4. RESOLVER FALLBACK (The requested "Helper File" logic)
+    log.warning(f"Direct fetches failed for '{symbol}'. Attempting to resolve name to symbol...")
+    resolved_symbol = search_symbol(symbol)
+    
+    if resolved_symbol:
+        log.info(f"✨ Resolved '{symbol}' to '{resolved_symbol}'. Retrying fetch...")
         
-    return price
+        # Try Yahoo with the RESOLVED symbol
+        price = get_yahoo_stock_price(resolved_symbol)
+        if price is not None:
+            return price
+            
+        # Try NSE if resolving gave a .NS symbol
+        if resolved_symbol.endswith('.NS'):
+            clean_nse = resolved_symbol.replace('.NS', '')
+            price = get_nse_stock_price(clean_nse)
+            if price is not None:
+                return price
+                
+    return None
 
 
 def should_send_alert(stock_id: int, alert_type: str) -> bool:
@@ -257,7 +267,6 @@ def record_alert(stock_id: int, user_id: int, alert_type: str,
             'is_acknowledged': False
         }).execute()
         
-        # Update last_alert_sent timestamp on stock
         # Update last_alert_sent timestamp on stock
         supabase.table('stocks').update({
             'last_alert_sent': datetime.now().isoformat()
