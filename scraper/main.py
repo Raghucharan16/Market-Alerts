@@ -353,7 +353,7 @@ def send_discord_alert(webhook_url: str, symbol: str, alert_type: str,
         change_text = f"+{percentage_change:.2f}%" if percentage_change > 0 else f"{percentage_change:.2f}%"
         
         # Acknowledgement Link
-        ack_link = f"{DASHBOARD_URL}/alerts/acknowledge?id={alert_id}" if alert_id else DASHBOARD_URL
+        ack_link = f"{DASHBOARD_URL}/alerts"
         
         # Construct Embed
         embed = {
