@@ -252,7 +252,7 @@ def record_alert(stock_id: int, user_id: int, alert_type: str,
             'alert_type': alert_type,
             'current_price': current_price,
             'threshold_price': threshold_price,
-            'atp_price': atp_price,
+            'buy_price': atp_price,
             'percentage_change': percentage_change,
             'is_acknowledged': False
         }).execute()
