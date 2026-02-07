@@ -31,6 +31,6 @@ jobs:
       env:
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        GOOGLE_CHAT_WEBHOOK: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
+        DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}
       run: |
         python scraper/main.py

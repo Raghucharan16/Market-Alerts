@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import AddStockForm from './components/AddStockForm'
 import StockList from './components/StockList'
-import { Loader2, LogOut } from 'lucide-react'
+import { Loader2, LogOut, TrendingUp } from 'lucide-react'
 
 export default function Home() {
   const router = useRouter()
@@ -79,6 +79,13 @@ export default function Home() {
             <div className="text-right text-xs text-gray-500 hidden sm:block">
               <p>Scraper Status: <span className="text-emerald-500">Active</span></p>
             </div>
+            <button
+              onClick={() => router.push('/alerts')}
+              className="mr-2 flex items-center gap-2 px-3 py-2 text-sm bg-emerald-600/10 text-emerald-500 hover:bg-emerald-600/20 rounded-md transition border border-emerald-500/20"
+            >
+              <TrendingUp size={16} />
+              View Alerts
+            </button>
             <button
               onClick={handleSignOut}
               className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-800 hover:bg-gray-700 rounded-md transition"
