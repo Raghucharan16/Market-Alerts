@@ -1,0 +1,4 @@
+databases/
+.env
+.env.example
+databases/schema.sql
