@@ -274,12 +274,6 @@ def record_alert(stock_id: int, user_id: int, alert_type: str,
     return None
 
 
-    except Exception as e:
-        log.error(f"Error recording alert: {e}")
-    
-    return None
-
-
 def log_alert_error(user_id: int, symbol: str, error_message: str):
     """Log failed alert attempts to database"""
     try:
