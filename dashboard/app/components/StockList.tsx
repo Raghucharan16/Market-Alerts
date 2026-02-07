@@ -1,7 +1,8 @@
 'use client'
 
 import { Trash2, TrendingUp, TrendingDown, Power } from 'lucide-react'
-import { deleteStock, toggleStockStatus } from '../actions'
+import { supabase } from '@/lib/supabaseClient'
+import { useState } from 'react'
 
 interface Stock {
     id: number
@@ -12,7 +13,44 @@ interface Stock {
     is_active: boolean
 }
 
-export default function StockList({ stocks }: { stocks: Stock[] }) {
+export default function StockList({ stocks, onUpdate }: { stocks: Stock[], onUpdate: () => void }) {
+    const [loadingId, setLoadingId] = useState<number | null>(null)
+
+    const toggleStatus = async (id: number, currentStatus: boolean) => {
+        setLoadingId(id)
+        try {
+            const { error } = await supabase
+                .from('stocks')
+                .update({ is_active: !currentStatus })
+                .eq('id', id)
+
+            if (error) throw error
+            onUpdate()
+        } catch (err) {
+            console.error('Error toggling status:', err)
+        } finally {
+            setLoadingId(null)
+        }
+    }
+
+    const deleteItem = async (id: number) => {
+        if (!confirm('Are you sure you want to delete this stock?')) return
+        setLoadingId(id)
+        try {
+            const { error } = await supabase
+                .from('stocks')
+                .delete()
+                .eq('id', id)
+
+            if (error) throw error
+            onUpdate()
+        } catch (err) {
+            console.error('Error deleting stock:', err)
+        } finally {
+            setLoadingId(null)
+        }
+    }
+
     if (stocks.length === 0) {
         return (
             <div className="text-center py-10 text-gray-500 bg-gray-800 rounded-lg border border-gray-700">
@@ -26,13 +64,14 @@ export default function StockList({ stocks }: { stocks: Stock[] }) {
             {stocks.map((stock) => {
                 const profitTarget = (stock.atp_price * (1 + stock.profit_threshold / 100)).toFixed(2)
                 const lossTarget = (stock.atp_price * (1 - stock.loss_threshold / 100)).toFixed(2)
+                const isLoading = loadingId === stock.id
 
                 return (
                     <div
                         key={stock.id}
                         className={`p-5 rounded-lg border transition duration-200 relative group ${stock.is_active
-                                ? 'bg-gray-800 border-gray-700 hover:border-gray-600'
-                                : 'bg-gray-900 border-gray-800 opacity-60'
+                            ? 'bg-gray-800 border-gray-700 hover:border-gray-600'
+                            : 'bg-gray-900 border-gray-800 opacity-60'
                             }`}
                     >
                         <div className="flex justify-between items-start mb-3">
@@ -42,18 +81,20 @@ export default function StockList({ stocks }: { stocks: Stock[] }) {
                             </div>
                             <div className="flex gap-2">
                                 <button
-                                    onClick={() => toggleStockStatus(stock.id, stock.is_active)}
+                                    onClick={() => toggleStatus(stock.id, stock.is_active)}
+                                    disabled={isLoading}
                                     className={`p-1.5 rounded-full transition ${stock.is_active ? 'text-green-400 hover:bg-green-900/30' : 'text-gray-500 hover:bg-gray-800'}`}
                                     title={stock.is_active ? "Pause Alerts" : "Resume Alerts"}
                                 >
-                                    <Power size={18} />
+                                    <Power size={18} className={isLoading ? "animate-pulse" : ""} />
                                 </button>
                                 <button
-                                    onClick={() => deleteStock(stock.id)}
+                                    onClick={() => deleteItem(stock.id)}
+                                    disabled={isLoading}
                                     className="p-1.5 text-red-400 hover:bg-red-900/30 rounded-full transition"
                                     title="Delete Stock"
                                 >
-                                    <Trash2 size={18} />
+                                    <Trash2 size={18} className={isLoading ? "animate-pulse" : ""} />
                                 </button>
                             </div>
                         </div>

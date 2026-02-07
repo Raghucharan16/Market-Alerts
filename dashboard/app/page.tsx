@@ -1,19 +1,67 @@
-import { createClient } from '@supabase/supabase-js'
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabaseClient'
 import AddStockForm from './components/AddStockForm'
 import StockList from './components/StockList'
+import { Loader2, LogOut } from 'lucide-react'
 
-// We need a server-side client for fetching
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-const supabase = createClient(supabaseUrl, supabaseKey)
+export default function Home() {
+  const router = useRouter()
+  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<any>(null)
+  const [stocks, setStocks] = useState<any[]>([])
 
-export const dynamic = 'force-dynamic'
+  const checkUser = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        router.push('/login')
+      } else {
+        setUser(session.user)
+        fetchStocks()
+      }
+    } catch (e) {
+      console.error(e)
+      router.push('/login')
+    } finally {
+      setLoading(false)
+    }
+  }
 
-export default async function Home() {
-  const { data: stocks } = await supabase
-    .from('stocks')
-    .select('*')
-    .order('created_at', { ascending: false })
+  const fetchStocks = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('stocks')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setStocks(data || [])
+    } catch (error) {
+      console.error('Error fetching stocks:', error)
+    }
+  }
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
+
+  useEffect(() => {
+    checkUser()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 text-emerald-500 animate-spin" />
+      </div>
+    )
+  }
+
+  if (!user) return null
 
   return (
     <main className="min-h-screen bg-gray-950 text-gray-100 p-8">
@@ -24,22 +72,31 @@ export default async function Home() {
               Market Alerts
             </h1>
             <p className="text-gray-400 mt-1">
-              Automated tracking & email alerts
+              Welcome, {user.user_metadata?.full_name || 'User'}
             </p>
           </div>
-          <div className="text-right text-xs text-gray-500">
-            <p>Scraper Status: <span className="text-emerald-500">Scheduled via Actions</span></p>
+          <div className="flex items-center gap-4">
+            <div className="text-right text-xs text-gray-500 hidden sm:block">
+              <p>Scraper Status: <span className="text-emerald-500">Active</span></p>
+            </div>
+            <button
+              onClick={handleSignOut}
+              className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-800 hover:bg-gray-700 rounded-md transition"
+            >
+              <LogOut size={16} />
+              Sign Out
+            </button>
           </div>
         </header>
 
         <div className="grid lg:grid-cols-3 gap-8">
           <div className="lg:col-span-1">
-            <AddStockForm />
+            <AddStockForm onSuccess={fetchStocks} />
           </div>
 
           <div className="lg:col-span-2">
-            <h2 className="text-xl font-semibold mb-4 text-white">Active Monitors</h2>
-            <StockList stocks={stocks || []} />
+            <h2 className="text-xl font-semibold mb-4 text-white">Your Active Monitors</h2>
+            <StockList stocks={stocks} onUpdate={fetchStocks} />
           </div>
         </div>
       </div>
