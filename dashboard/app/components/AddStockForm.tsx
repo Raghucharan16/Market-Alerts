@@ -1,8 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabaseClient'
-import { Plus, Loader2 } from 'lucide-react'
+import { Plus, Loader2, Search } from 'lucide-react'
+
+interface StockQuote {
+    symbol: string
+    shortname?: string
+    longname?: string
+    exchange?: string
+    quoteType?: string
+}
 
 export default function AddStockForm({ onSuccess }: { onSuccess: () => void }) {
     const [loading, setLoading] = useState(false)
@@ -13,6 +21,56 @@ export default function AddStockForm({ onSuccess }: { onSuccess: () => void }) {
         loss: '5.0'    // Default
     })
     const [message, setMessage] = useState('')
+
+    // Search State
+    const [query, setQuery] = useState('')
+    const [results, setResults] = useState<StockQuote[]>([])
+    const [searching, setSearching] = useState(false)
+    const [showResults, setShowResults] = useState(false)
+    const searchRef = useRef<HTMLDivElement>(null)
+
+    // Close search results when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+                setShowResults(false)
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [])
+
+    // Debounced Search
+    useEffect(() => {
+        const timer = setTimeout(async () => {
+            if (query.trim().length < 2) {
+                setResults([])
+                return
+            }
+
+            setSearching(true)
+            try {
+                const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`)
+                const data = await res.json()
+                // Filter for Equity only and prioritize .NS/.BO
+                const quotes = (data.quotes || []).filter((q: any) => q.quoteType === 'EQUITY')
+                setResults(quotes)
+                setShowResults(true)
+            } catch (err) {
+                console.error("Search failed", err)
+            } finally {
+                setSearching(false)
+            }
+        }, 500) // 500ms debounce
+
+        return () => clearTimeout(timer)
+    }, [query])
+
+    const selectStock = (quote: StockQuote) => {
+        setFormData({ ...formData, symbol: quote.symbol })
+        setQuery(quote.symbol) // Update search box to show selected symbol
+        setShowResults(false)
+    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -35,6 +93,7 @@ export default function AddStockForm({ onSuccess }: { onSuccess: () => void }) {
             if (error) throw error
 
             setFormData({ symbol: '', atp: '', profit: '5.0', loss: '5.0' })
+            setQuery('')
             setMessage('Stock added successfully!')
             setTimeout(() => setMessage(''), 3000)
             onSuccess() // Refresh list
@@ -53,16 +112,42 @@ export default function AddStockForm({ onSuccess }: { onSuccess: () => void }) {
                 Add New Stock
             </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
+
+                {/* Search Input */}
+                <div className="relative" ref={searchRef}>
                     <label className="block text-sm font-medium text-gray-400 mb-1">Stock Symbol</label>
-                    <input
-                        type="text"
-                        value={formData.symbol}
-                        onChange={(e) => setFormData({ ...formData, symbol: e.target.value })}
-                        placeholder="e.g. RELIANCE"
-                        required
-                        className="w-full bg-gray-900 border border-gray-700 rounded-md p-2 text-white placeholder-gray-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition uppercase"
-                    />
+                    <div className="relative">
+                        <input
+                            type="text"
+                            value={query}
+                            onChange={(e) => {
+                                setQuery(e.target.value)
+                                setFormData({ ...formData, symbol: e.target.value.toUpperCase() })
+                            }}
+                            placeholder="Search (e.g. RELIANCE)"
+                            className="w-full bg-gray-900 border border-gray-700 rounded-md p-2 pl-9 text-white placeholder-gray-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition uppercase"
+                            required
+                        />
+                        <Search className="w-4 h-4 text-gray-500 absolute left-3 top-3" />
+                        {searching && <Loader2 className="w-4 h-4 text-emerald-500 absolute right-3 top-3 animate-spin" />}
+                    </div>
+
+                    {/* Search Results Dropdown */}
+                    {showResults && results.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-gray-900 border border-gray-700 rounded-md shadow-xl max-h-60 overflow-auto">
+                            {results.map((quote) => (
+                                <div
+                                    key={quote.symbol}
+                                    onClick={() => selectStock(quote)}
+                                    className="p-3 hover:bg-gray-800 cursor-pointer border-b border-gray-800 last:border-0"
+                                >
+                                    <div className="font-bold text-emerald-400">{quote.symbol}</div>
+                                    <div className="text-sm text-gray-400 truncate">{quote.shortname || quote.longname}</div>
+                                    <div className="text-xs text-gray-600">{quote.exchange}</div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 <div className="grid grid-cols-3 gap-4">
@@ -112,7 +197,7 @@ export default function AddStockForm({ onSuccess }: { onSuccess: () => void }) {
 
                 <button
                     type="submit"
-                    disabled={loading}
+                    disabled={loading || !formData.symbol}
                     className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 px-4 rounded-md transition duration-200 flex justify-center items-center gap-2 disabled:opacity-50"
                 >
                     {loading ? <Loader2 className="animate-spin h-5 w-5" /> : 'Add Stock'}
