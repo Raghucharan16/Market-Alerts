@@ -1,10 +1,9 @@
 # 📈 Market Alerts System
 
-> **Real-time stock price alerts for Indian markets (NSE/BSE) with Google Chat notifications**
+> **Real-time stock price alerts for Indian markets (NSE/BSE) with Discord notifications**
 
 [![GitHub Actions](https://img.shields.io/badge/Automated-GitHub%20Actions-2088FF?logo=github-actions)](https://github.com/features/actions)
 [![Supabase](https://img.shields.io/badge/Database-Supabase-3ECF8E?logo=supabase)](https://supabase.com)
-[![Google Chat](https://img.shields.io/badge/Alerts-Google%20Chat-4285F4?logo=google-chat)](https://chat.google.com)
 
 ---
 
