@@ -419,6 +419,35 @@ def process_stock(stock: Dict):
     loss_pct = float(stock['loss_alert_pct'])
     user_id = stock.get('user_id') 
     
+    # Strict 60-Minute Cooldown Check
+    last_alert_str = stock.get('last_alert_sent')
+    if last_alert_str:
+        try:
+            last_alert = datetime.fromisoformat(last_alert_str.replace('Z', '+00:00'))
+            # If naive (no timezone), assume UTC or strip tz from now()
+            if last_alert.tzinfo is None:
+                last_alert = last_alert.replace(tzinfo=datetime.now().astimezone().tzinfo)
+                
+            time_since_alert = datetime.now(last_alert.tzinfo) - last_alert
+            
+            # 60 minutes = 3600 seconds
+            if time_since_alert.total_seconds() < 3600:
+                log.info(f"⏳ Cooldown: Skipping {symbol} (Last alert {int(time_since_alert.total_seconds()/60)} mins ago)")
+                
+                # Still update current price for dashboard visibility even if skipping alert
+                try: 
+                    # We can fetch price and update even if we don't alert
+                    current_price_check, _ = get_stock_price(symbol)
+                    if current_price_check:
+                         supabase.table('stocks').update({
+                            'last_price': current_price_check
+                        }).eq('id', stock_id).execute()
+                except Exception:
+                    pass
+                return
+        except Exception as e:
+            log.error(f"Error parsing last_alert_sent for {symbol}: {e}")
+
     # Extract webhook from joined profiles data
     # 'profiles' key comes from the join.
     user_data = stock.get('profiles')
@@ -466,6 +495,9 @@ def process_stock(stock: Dict):
     
     # Check for profit alert
     if current_price >= profit_target:
+        # We already did strict time check above, so strict check here is redundant but safe.
+        # But we also rely on should_send_alert DB function which checks is_acknowledged.
+        # Let's keep both layers for now.
         if should_send_alert(stock_id, 'profit'):
             percentage_change = ((current_price - atp) / atp) * 100
             msg = (f"PROFIT ALERT: {symbol} reached ₹{current_price:.2f}! "
@@ -491,7 +523,7 @@ def process_stock(stock: Dict):
                 log.warning(f"Skipping Profit Alert for {symbol} due to missing webhook")
 
         else:
-            log.info(f"Profit alert for {symbol} already sent recently, skipping...")
+            log.info(f"Profit alert for {symbol} is pending acknowledgement, skipping...")
     
     # Check for loss alert
     elif current_price <= loss_target:
@@ -519,19 +551,18 @@ def process_stock(stock: Dict):
             else:
                 log.warning(f"Skipping Loss Alert for {symbol} due to missing webhook")
         else:
-            log.info(f"Loss alert for {symbol} already sent recently, skipping...")
+            log.info(f"Loss alert for {symbol} is pending acknowledgement, skipping...")
     
     else:
         log.info(f"{symbol} is within normal range")
     
     # Update last_price in database
-    # Update last_price in database - REMOVED as column does not exist in schema
-    # try:
-    #     supabase.table('stocks').update({
-    #         'last_price': current_price
-    #     }).eq('id', stock_id).execute()
-    # except Exception as e:
-    #     log.error(f"Error updating last_price for {symbol}: {e}")
+    try:
+        supabase.table('stocks').update({
+            'last_price': current_price
+        }).eq('id', stock_id).execute()
+    except Exception as e:
+        log.warning(f"Could not update last_price for {symbol} (Column might be missing): {e}")
 
 
 def main():
