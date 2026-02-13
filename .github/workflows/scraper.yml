@@ -6,8 +6,8 @@ on:
     # Cron uses UTC. IST is UTC+5:30.
     # 9:30 AM IST = 4:00 AM UTC
     # 3:30 PM IST = 10:00 AM UTC
-    # - cron: '*/3 4-10 * * 1-5' # Mon-Fri, every 3 minutes
-    - cron: '*/3 * * * *' # Every 3 minutes 
+    - cron: '*/3 4-10 * * 1-5' # Mon-Fri, every 3 minutes
+    # - cron: '*/3 * * * *' # Every 3 minutes 
   workflow_dispatch: # Allow manual trigger
 
 jobs:
